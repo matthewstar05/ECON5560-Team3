@@ -64,15 +64,15 @@ The authors published **one data file** (`Resources/S1Table.DTA`, Stata format) 
 | Target | Result |
 |---|---|
 | Sample sizes (N = 1,968 all / 1,476 councillors) | ✅ **Exact.** We identified precisely which 164 people (and which 123 councillors) the authors used |
-| Table 1 | ✅ 9 of 13 numbers exact; ❗ the town-size row doesn't match the data |
-| Table 3, models 1–2 (conditional logit) | ✅ **20 of 24 coefficient + p-value pairs exact to 3 decimals.** The other 4 look like typos in the paper. R gives identical numbers |
+| Table 1 | ✅ 9 of 13 numbers exact; ❗ the town-size row only fits 188 respondents, so it came from a larger version of the data than the one published |
+| Table 3, models 1–2 (conditional logit) | ✅ **20 of 24 coefficient + p-value pairs exact to 3 decimals.** The other 4 are reporting errors in the paper, including two standard errors printed as coefficients (see finding 3). R gives identical numbers |
 | Table 3, models 3–4 (mixed logit) | ≈ Same signs and similar sizes; 21 of 24 published values fall inside our range. The councillor-only model is fragile |
-| Figures 1 and 2 | ✅ Rebuilt |
+| Figures 1 and 2 | ✅ Figure 1: all 36 bars exact. Figure 2: shape reproduced, 4 of 5 peaks close. The published Figure 2 is model 3, although the text says model 4 |
 
 **Before any model, the raw choices already move with the information shown:**
 ![Raw pattern](Data-Parsing/output/slides/slide1_raw_pattern.png)
 
-**We reproduce the main model from the raw data (the few differences look like typos):**
+**We reproduce the main model from the raw data (the few differences are reporting errors in the paper):**
 ![Reproduced](Data-Parsing/output/slides/slide2_reproduced.png)
 
 **…but only with an unusual grouping of the data. Grouped the standard way, the effects keep their direction but are less certain:**
@@ -96,7 +96,7 @@ Each step is a short script in [`Data-Parsing/`](Data-Parsing). The [walkthrough
 
 **Step 3: Find the councillors.** The "Councillor" role code gives 121, two short of the paper's 123. Two more people chose "Other" and wrote **"Mayor"** and **"Councillor but also Resource Consent Hearing Commissioner"**. Adding them gives 123 (= 1,476 rows, and the paper's "75% councillors"). ✅
 
-**Step 4: Reproduce Table 1** (`02_descriptives.py`). Gender, age and residence match exactly, using *all 180* respondents. Town size doesn't match any sample we tried.
+**Step 4: Reproduce Table 1** (`02_descriptives.py`). Gender, age and residence match exactly, using *all 180* respondents. Town size doesn't match any sample of the file. Its percentages only work out to whole-number counts for 188 respondents, so that row was computed on a larger version of the data than the one published.
 
 **Step 5: Build the regression variables.** Each option gets yes/no indicators for its attribute levels, plus "**$ shown**" indicators (for example, "Residential development *and* this person was in T2 or T3"). One trap: the file's ready-made variable `water_high3` means *high* water in T3, not low, so we built these ourselves.
 
@@ -104,13 +104,20 @@ Each step is a short script in [`Data-Parsing/`](Data-Parsing). The [walkthrough
 
 **Step 7: Reproduce models 3–4** (`04_mixed_logit.py`). The mixed logit lets every person have their own preferences, which requires computer simulation. Stata wasn't available, so we wrote the estimator ourselves, following Train (2009). The fit statistics match the paper closely (−425.4 vs −421.9). The coefficients, however, move noticeably depending on the random numbers used in the simulation, so we report our estimate *and* the range across 20 re-runs. We also rebuilt Figure 2 from this model.
 
-**Step 8: Present it** (`05_build_dashboard.py`, `06_slide_figures.py`). The dashboard and the slide figures are generated from the same result files, so nothing is typed in by hand.
+**Step 8: Present it** (`05_build_dashboard.py`, `06_slide_figures.py`, `07_paper_figures.py`). The dashboard and slide figures come from the same result files, so nothing is typed in by hand. `07_paper_figures.py` redraws all five published exhibits from the parsed CSVs, with names numbered to match the originals in `replication-targets/`, and puts each pair side by side in `output/paper_figures/side_by_side/`.
+
+**Step 9: Debug every difference** (`08_debug_discrepancies.py`). For each published number we couldn't reproduce, the script tests concrete explanations against the data and records the evidence in `output/tables/discrepancy_diagnosis.csv`. None of the differences came from our code (finding 3).
 
 ## 5. What the replication turned up
 1. **The conditional logit pools each card across people.** That grouping is the only way to reproduce the published numbers, and it is not the standard setup. Grouped the standard way, the main effects roughly halve. **Every effect keeps its direction.** Among the "$ shown" effects, residential development stays significant and the water-quality effects are borderline.
 2. **The mixed logit results depend on the random simulation draws.** The model 3 numbers are well within our range. For councillors (model 4), the paper's headline "low water × $" effect (−8.65, p = 0.015) comes out at about −3 (p = 0.38) in our high-precision run.
-3. **Apparent typos in Table 3.** Model 2's water coefficients are printed as −0.393 and −0.602, but the data give −3.891 and −6.184. Model 1's residential × $ is printed 0.670 against 0.699 in the data, with an identical p-value. One p-value is printed 0.031 against 0.001 in the data. One set of significance stars contradicts its p-value.
-4. **Descriptions that don't match the data.** "15 individuals are randomly dropped" in each simulation draw most likely describes a Stata setting that discards the first 15 random numbers; no people are dropped. The survey is described as using "two blocks", but each person got a random 4 of 12 cards. Table 1 describes all 180 starters, not the 164 analysed.
+3. **Every number we couldn't match traces to a reporting problem in the paper** (`08_debug_discrepancies.py`):
+   - Model 2's water "coefficients" (−0.393, −0.602) are exactly its **standard errors** (0.393, 0.602), printed in place of the coefficients (−3.891, −6.184).
+   - Model 1's residential × $ is printed 0.670, but its printed p-value (0.018) is what the data's 0.699 gives; 0.670 would give 0.023.
+   - Model 1's Stables & landscape p-value is printed 0.031 (data: 0.001). The same model on all 180 respondents gives exactly 0.031, so it's likely left over from an earlier run.
+   - Table 1's town-size shares only fit 188 respondents; the published file has 180.
+   - Model 4's residential × $ is marked \*\* with p = 0.062.
+4. **Descriptions that don't match the data.** "15 individuals are randomly dropped" in each simulation draw most likely describes a Stata setting that discards the first 15 random numbers; no people are dropped. The survey is described as using "two blocks", but each person got a random 4 of 12 cards. Table 1 describes all 180 starters, not the 164 analysed. Figure 2 is described as model 4 but matches model 3.
 5. **Design limits worth knowing.** "No development" only ever appears in the status quo, so the development effects also capture a general preference for *any* new plan. There are about 55 people per group. In T3, development and water prices always appear together. The water-loss dollar amounts were chosen by the authors rather than taken from a valuation study.
 
 **Our overall read:** the paper's *direction* is robust. Showing a price tag does seem to make people weigh that impact more. How *big* the effect is, and how statistically certain, depends on modelling choices the paper doesn't disclose.
@@ -143,21 +150,24 @@ ECON5560-Team3/
 │   ├── 04_mixed_logit.py         Table 3 models 3–4, simulation sensitivity, Figure 2
 │   ├── 05_build_dashboard.py     builds the dashboard from the results
 │   ├── 06_slide_figures.py       16:9 figures for slides
+│   ├── 07_paper_figures.py       all 5 published exhibits redrawn from the parsed CSVs, plus side-by-sides
+│   ├── 08_debug_discrepancies.py diagnoses every number we couldn't reproduce
 │   ├── common.py                 shared settings, published numbers, estimators
-│   ├── run_all.py                runs steps 1–6 in order
+│   ├── run_all.py                runs steps 1–8 in order
 │   ├── crosscheck_clogit.R       independent check of models 1–2 in R
 │   ├── replication_walkthrough.ipynb   narrated version, with outputs
 │   ├── REPLICATION_LOG.md        detailed record of every decision and dead end
 │   ├── CHECKIN_WEEK5.md          status, open questions, appraisal skeleton
 │   ├── dashboard/                dashboard source (template.html) and build
-│   └── output/                   data/ tables/ figures/ slides/ results/ logs/
+│   ├── replication-targets/      the paper's 5 published exhibits, numbered 01–05
+│   └── output/                   data/ tables/ figures/ slides/ paper_figures/ results/ logs/
 └── Resources/                    ← supporting files (see Resources/README.md)
     ├── Eppink_2016_PLoSONE_paper.pdf
     ├── S1Table.DTA               the authors' data
     ├── Team3_Charter.pdf
     └── COURSE_REQUIREMENTS.md    memo and presentation requirements, summarised
 ```
-The most useful outputs to open directly: `output/tables/table3_cl.csv` and `table3_ml.csv` (paper vs ours, every coefficient), `output/tables/table1_comparison.csv`, and `output/slides/*.png`.
+The most useful outputs to open directly: `output/tables/table3_cl.csv` and `table3_ml.csv` (paper vs ours, every coefficient), `output/tables/table1_comparison.csv`, `output/tables/discrepancy_diagnosis.csv` (why each unmatched number differs), `output/paper_figures/side_by_side/*.png` (published vs ours, exhibit by exhibit), and `output/slides/*.png`.
 
 ## 8. Reproduce everything yourself
 Requires Python 3.10+ (and optionally R with the `survival` package).
@@ -165,7 +175,7 @@ Requires Python 3.10+ (and optionally R with the `survival` package).
 git clone https://github.com/matthewstar05/ECON5560-Team3.git
 cd ECON5560-Team3/Data-Parsing
 pip install -r requirements.txt
-python run_all.py              # about 5 minutes; rebuilds every table, figure, the dashboard and slides
+python run_all.py              # about 6 minutes; rebuilds every table, figure, the dashboard, slides and paper exhibits
 Rscript crosscheck_clogit.R    # optional, a few seconds
 ```
 - To view the dashboard offline, open `docs/index.html` (or `Data-Parsing/dashboard/index.html`) in any browser. No installs needed.
